@@ -4,10 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"net/http"
 
 	// "time"
 
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -19,12 +21,6 @@ func main() {
 		panic(err)
 	}
 
-	// // See "Important settings" section.
-	// db.SetConnMaxLifetime(time.Minute * 3)
-	// db.SetMaxOpenConns(10)
-	// db.SetMaxIdleConns(10)
-
-	// fmt.Println("connect success", db)
 	var name string
 	err = db.QueryRow("SELECT cafe_name FROM cafe WHERE cafe_id = 1").Scan(&name)
 	if err != nil {
@@ -36,8 +32,52 @@ func main() {
 	defer db.Close()
 
 	e := echo.New()
-	e.GET("/", func(c echo.Context) error {
-		return c.File("coffeenyan-front/pages/_app.tsx")
+
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"*"},
+		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},
+	}))
+	type Coffee struct {
+		MenuName    string `json:"MenuName"`
+		Acidity     int    `json:"Acidity"`
+		Aftertastes int    `json:"Aftertastes"`
+		Body        int    `json:"Body"`
+		Bitterness  int    `json:"Bitterness"`
+		Sweetness   int    `json:"Sweetness"`
+		Aroma       int    `json:"Aroma"`
+		Balance     int    `json:"Balance"`
+		CafeId      int    `json:"CafeId"`
+	}
+	// type CoffeeList struct {
+	// 	CoffeeList []Coffee `json:"coffee"`
+	// }
+
+	e.POST("/coffee", func(c echo.Context) error {
+
+		emp := new(Coffee)
+		if err := c.Bind(emp); err != nil {
+			return err
+		}
+
+		sql := "INSERT INTO coffee(menu_name, acidity, aftertastes, aroma, balance, bitterness, body, sweetness, cafe_id ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"
+		stmt, err := db.Prepare(sql)
+
+		if err != nil {
+			fmt.Print(err.Error())
+		}
+		defer stmt.Close()
+		result, err2 := stmt.Exec(emp.MenuName, emp.Acidity, emp.Aftertastes, emp.Aroma, emp.Balance, emp.Bitterness, emp.Body, emp.Sweetness, emp.CafeId)
+
+		// // Exit if we get an error
+		if err2 != nil {
+			panic(err2)
+		}
+		fmt.Println(result.LastInsertId())
+
+		return c.JSON(http.StatusCreated, emp)
 	})
 
 	e.Logger.Fatal(e.Start(":1323")) // localhost:1323
