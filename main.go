@@ -3,10 +3,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
-	"net/http"
 
-	// "time"
+	"net/http"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -21,14 +19,6 @@ func main() {
 		panic(err)
 	}
 
-	var name string
-	err = db.QueryRow("SELECT cafe_name FROM cafe WHERE cafe_id = 1").Scan(&name)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(name)
-	print("success")
-
 	defer db.Close()
 
 	e := echo.New()
@@ -40,6 +30,7 @@ func main() {
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},
 	}))
+
 	type Coffee struct {
 		MenuName    string `json:"MenuName"`
 		Acidity     int    `json:"Acidity"`
@@ -51,33 +42,66 @@ func main() {
 		Balance     int    `json:"Balance"`
 		CafeId      int    `json:"CafeId"`
 	}
-	// type CoffeeList struct {
-	// 	CoffeeList []Coffee `json:"coffee"`
-	// }
+
+	type Cafe struct {
+		CafeName    string `json:"CafeName"`
+		CafeAddress string `json:"CafeAddress"`
+		Coffee      Coffee `json:"Coffee"`
+	}
 
 	e.POST("/coffee", func(c echo.Context) error {
 
-		emp := new(Coffee)
+		emp := new(Cafe)
 		if err := c.Bind(emp); err != nil {
 			return err
 		}
 
+		sql2 := "INSERT INTO cafe(cafe_name, cafe_address) VALUES(?,?)"
+		stmt2, err2 := db.Prepare(sql2)
+		if err2 != nil {
+			fmt.Print(err.Error())
+		}
+		defer stmt2.Close()
+		result2, err4 := stmt2.Exec(emp.CafeName, emp.CafeAddress)
+		if err4 != nil {
+			panic(err4)
+		}
+		fmt.Println(result2.LastInsertId())
+
+		var id int
+		db.QueryRow("SELECT LAST_INSERT_ID() FROM cafe").Scan(&id)
+		fmt.Print(id)
+
 		sql := "INSERT INTO coffee(menu_name, acidity, aftertastes, aroma, balance, bitterness, body, sweetness, cafe_id ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"
 		stmt, err := db.Prepare(sql)
-
 		if err != nil {
 			fmt.Print(err.Error())
 		}
 		defer stmt.Close()
-		result, err2 := stmt.Exec(emp.MenuName, emp.Acidity, emp.Aftertastes, emp.Aroma, emp.Balance, emp.Bitterness, emp.Body, emp.Sweetness, emp.CafeId)
-
-		// // Exit if we get an error
-		if err2 != nil {
-			panic(err2)
+		result, err3 := stmt.Exec(emp.Coffee.MenuName, emp.Coffee.Acidity, emp.Coffee.Aftertastes, emp.Coffee.Aroma, emp.Coffee.Balance, emp.Coffee.Bitterness, emp.Coffee.Body, emp.Coffee.Sweetness, id)
+		// Exit if we get an error
+		if err3 != nil {
+			panic(err3)
 		}
 		fmt.Println(result.LastInsertId())
 
 		return c.JSON(http.StatusCreated, emp)
+	})
+
+	e.GET("/cafe/:id", func(c echo.Context) error {
+		id := c.Param("id")
+		fmt.Println(id)
+		var cafe_name string
+		var cafe_address string
+
+		err = db.QueryRow("SELECT cafe_name, cafe_address FROM cafe WHERE cafe_id = ?", id).Scan(&cafe_name, &cafe_address)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		response := Cafe{CafeName: cafe_name, CafeAddress: cafe_address}
+		return c.JSON(http.StatusOK, response)
 	})
 
 	e.Logger.Fatal(e.Start(":1323")) // localhost:1323
